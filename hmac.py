@@ -1,18 +1,17 @@
 import hmac
-import sound
+import hashlib
+from sound import tonality
 
+if __name__=="__main__":
+    secret=tonality()
+    secret = str(secret)
 
-message=sound.tonality()
-secret_key = "the secret key"
-message = str(message)
+    # Encode secret 
+    byte_secret = secret.encode('utf-8')
 
-# Encode key and message to bytes
-byte_key = secret_key.encode('utf-8')
-byte_message = message.encode('utf-8')
+    # Create the HMAC object and get the hexadecimal digest
+    h = hashlib.new('sha256')
+    h.update(byte_secret)
+    signature = h.hexdigest()
 
-# Create the HMAC object and get the hexadecimal digest
-h = hmac.new(byte_key, byte_message, hmac.hashlib.sha256)
-signature = h.hexdigest()
-
-print(f"HMAC signature: {signature}")
-
+    print(f"Digest is: {signature}")
