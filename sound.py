@@ -28,5 +28,5 @@ def send_signal(data):
         time.sleep(0.03)
 if __name__=='main':
     send_signal("A") 
-tone,fs= tonality()
+
 
