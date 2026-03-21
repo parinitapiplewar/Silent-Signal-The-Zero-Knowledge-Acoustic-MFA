@@ -1,6 +1,6 @@
 import hmac
 import hashlib
-from sound import tonality
+
 SECRET_KEY=b"silent_signal_key"
 
 def generate_hmac(challenge):
