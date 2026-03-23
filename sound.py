@@ -26,7 +26,6 @@ def send_signal(data):
         sd.play(tone,FS)
         sd.wait()
         time.sleep(0.03)
-if __name__=='main':
-    send_signal("A") 
+
 
 
