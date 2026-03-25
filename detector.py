@@ -42,6 +42,7 @@ def binary_to_string(binary):
 
 def receive_signal(duration=4):
     p = pyaudio.PyAudio()
+    print("[RX] Waiting for valid signal...")
 
     stream = p.open(format=FORMAT,
                     channels=CHANNELS,
@@ -52,6 +53,8 @@ def receive_signal(duration=4):
     print("[RX] Listening...")
 
     bits = []
+    preamble_count=3
+    PREAMBLE_REQUIRED=3
     preamble_detected = False
 
     for _ in range(int(RATE / CHUNK * duration)):
@@ -65,9 +68,15 @@ def receive_signal(duration=4):
         symbol = classify(freq)
 
         if symbol == 'P':
-            preamble_detected = True
-            continue
+            preamble_count+=1
+            if preamble_count>=PREAMBLE_REQUIRED:
+                preamble_detected=True
+                print("[RX] Preamble detected")
 
+                continue
+            else:
+                preamble_count=0
+        print("[RX] Starting data capture...")
         if preamble_detected and symbol in ['0', '1']:
             bits.append(symbol)
 
