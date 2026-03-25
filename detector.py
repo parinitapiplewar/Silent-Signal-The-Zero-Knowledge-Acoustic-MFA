@@ -7,18 +7,18 @@ CHANNELS = 1
 RATE = 44100
 CHUNK = 8192
 
-FREQ_ONE = 21000
-FREQ_ZERO = 19000
-FREQ_PREAMBLE = 20000
+FREQ_ONE = 18000
+FREQ_ZERO = 16000
+FREQ_PREAMBLE = 17000
 
 TOLERANCE = 1500
 
 
 def detect_freq(signal):
     fft_data = rfft(signal)
-    freqs = rfftfreq(len(signal), 1/RATE)
-    mag = np.abs(fft_data)
-    return freqs[np.argmax(mag)]
+    freqs = rfftfreq(len(signal), 1 / RATE)
+    magnitude = np.abs(fft_data)
+    return freqs[np.argmax(magnitude)]
 
 
 def classify(freq):
@@ -34,13 +34,13 @@ def classify(freq):
 def binary_to_string(binary):
     chars = []
     for i in range(0, len(binary), 8):
-        byte = binary[i:i+8]
+        byte = binary[i:i + 8]
         if len(byte) == 8:
             chars.append(chr(int(byte, 2)))
     return ''.join(chars)
 
 
-def receive_signal(duration=3):
+def receive_signal(duration=4):
     p = pyaudio.PyAudio()
 
     stream = p.open(format=FORMAT,

@@ -25,4 +25,4 @@ def send_signal(data):
         tone=generate_tone(freq)
         sd.play(tone,FS)
         sd.wait()
-        time.sleep(0.03)
+        time.sleep(0.01)

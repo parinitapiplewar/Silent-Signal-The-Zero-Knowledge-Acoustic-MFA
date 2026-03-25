@@ -3,18 +3,23 @@ from sound import send_signal
 from hmac_module import generate_hmac
 import time
 
-print("[RESPONDER] Waiting for challenge...")
+print("\n[RESPONDER] Waiting for challenge...")
 
-#Step 1: Receive challenge
-challenge=receive_signal()
-print(f"[RESPONDER] Received challenge: {challenge}")
+# Step 1: receive challenge
+challenge = receive_signal()
 
-#Step 2: calculate response
-response=generate_hmac(challenge)[:8]
-print("[RESPONDER] Sending response...")
+if challenge:
+    challenge = challenge.strip()
+
+print(f"[RESPONDER] Challenge received: {challenge}")
+
+# Step 2: compute response
+response_full = generate_hmac(challenge)
+response = response_full[:8]   # truncate for reliability
+
+print(f"[RESPONDER] Sending response: {response}")
 
 time.sleep(1)
 
-
-#Step 3: send response
+# Step 3: send response
 send_signal(response)

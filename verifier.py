@@ -4,26 +4,33 @@ from hmac_module import verify_hmac
 from challenge import generate_challenge
 import time
 
-print("[VERIFIER] Generating challenge...")
-challenge = generate_challenge()
+print("\n[VERIFIER] Starting system...")
 
+# Step 1: generate challenge
+challenge = generate_challenge()
 print(f"[VERIFIER] Challenge: {challenge}")
 
-# Step 1: send challenge
+time.sleep(1)
+
+# Step 2: send challenge
 print("[VERIFIER] Sending challenge...")
 send_signal(challenge)
 
 time.sleep(1)
 
-# Step 2: receive response
+# Step 3: receive response
 print("[VERIFIER] Waiting for response...")
 received = receive_signal()
-received=received.strip()
 
-# Step 3: verify
+if received:
+    received = received.strip()
+
+print(f"[VERIFIER] Received: {received}")
+
+# Step 4: verify
 print("[VERIFIER] Verifying...")
 
 if verify_hmac(challenge, received):
-    print("AUTHENTICATED")
+    print("\n AUTHENTICATED")
 else:
-    print("REJECTED")
+    print("\n REJECTED")
