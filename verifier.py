@@ -18,6 +18,7 @@ time.sleep(1)
 # Step 2: receive response
 print("[VERIFIER] Waiting for response...")
 received = receive_signal()
+received=received.strip()
 
 # Step 3: verify
 print("[VERIFIER] Verifying...")

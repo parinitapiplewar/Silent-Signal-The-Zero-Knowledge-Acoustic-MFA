@@ -2,12 +2,12 @@ import numpy as np
 import sounddevice as sd
 import time
 FS = 44100
-DURATION =0.1
+DURATION =0.2
 freq_one = 21000
 freq_zero=19000
 def generate_tone(freq, duration=DURATION):
     t = np.linspace(0,duration,int(FS * duration), False)
-    return np.float32(0.8 * np.sin(2 * np.pi * freq * t))
+    return np.float32(0.5 * np.sin(2 * np.pi * freq * t))
 def encode_data(data):
     """
     Converts string to binary
@@ -26,6 +26,3 @@ def send_signal(data):
         sd.play(tone,FS)
         sd.wait()
         time.sleep(0.03)
-
-
-

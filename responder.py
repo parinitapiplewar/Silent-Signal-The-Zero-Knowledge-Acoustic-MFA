@@ -10,10 +10,10 @@ challenge=receive_signal()
 print(f"[RESPONDER] Received challenge: {challenge}")
 
 #Step 2: calculate response
-response=generate_hmac(challenge)
+response=generate_hmac(challenge)[:8]
 print("[RESPONDER] Sending response...")
 
-time.sleep(2)
+time.sleep(1)
 
 
 #Step 3: send response
