@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vocal-Vibe Mobile Verification</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --card-bg: rgba(30, 41, 59, 0.95);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-color: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            --transition-speed: 0.4s;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 20px;
+            box-shadow: var(--shadow-lg);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(10px);
+        }
+
+        .state-panel {
+            padding: 2.5rem 1.5rem;
+            width: 100%;
+            transition: transform var(--transition-speed) ease-in-out, opacity var(--transition-speed) ease-in-out;
+        }
+
+        #loginState {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #verifyState {
+            display: none;
+            opacity: 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+        }
+        
+        .container.verifying #loginState {
+            transform: translateX(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .container.verifying #verifyState {
+            display: flex;
+            flex-direction: column;
+            position: static;
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* Login Layout */
+        .title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 2rem;
+            line-height: 1.3;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-size: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1.1rem;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px var(--accent-glow);
+            transition: all 0.3s ease;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .instruction {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 2rem;
+            line-height: 1.5;
+        }
+
+        /* Verify Layout */
+        .verify-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .status-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1rem;
+            height: 180px;
+            overflow-y: auto;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            color: var(--text-muted);
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        .log-item {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        .log-item.active {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .log-item.success { color: var(--success-color); font-weight: bold; }
+        .log-item.error { color: var(--error-color); font-weight: bold; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Progress Bar */
+        .progress-wrapper {
+            margin-bottom: 1.5rem;
+        }
+        
+        .progress-track {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-color);
+            border-radius: 3px;
+            transition: width 0.4s ease;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .progress-text {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-align: right;
+            font-weight: 500;
+        }
+
+        /* Graph */
+        .graph-section {
+            background: rgba(15, 23, 42, 0.4);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .graph-title {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .bars {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            gap: 5px;
+            height: 50px;
+        }
+
+        .bar {
+            width: 6px;
+            background: var(--accent-color);
+            border-radius: 3px;
+            height: 10%;
+            opacity: 0.5;
+            transition: height 0.2s ease;
+        }
+
+        .animating .bar {
+            animation: bounce 0.8s infinite alternate ease-in-out;
+            opacity: 0.9;
+        }
+
+        .bar:nth-child(1) { animation-delay: 0.0s; }
+        .bar:nth-child(2) { animation-delay: 0.15s; }
+        .bar:nth-child(3) { animation-delay: 0.3s; }
+        .bar:nth-child(4) { animation-delay: 0.45s; }
+        .bar:nth-child(5) { animation-delay: 0.6s; }
+        .bar:nth-child(6) { animation-delay: 0.75s; }
+        .bar:nth-child(7) { animation-delay: 0.9s; }
+        .bar:nth-child(8) { animation-delay: 1.05s; }
+        .bar:nth-child(9) { animation-delay: 1.2s; }
+
+        @keyframes bounce {
+            0% { height: 15%; }
+            100% { height: 100%; }
+        }
+
+        /* Final result state */
+        .result-msg {
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .container.success-mode .progress-fill { background: var(--success-color); box-shadow: 0 0 10px var(--success-glow); }
+        .container.success-mode .verify-header { color: var(--success-color); }
+        .container.success-mode .result-msg { display: block; color: var(--success-color); }
+        .container.success-mode .animating .bar { background: var(--success-color); }
+
+        .container.error-mode .progress-fill { background: var(--error-color); box-shadow: 0 0 10px var(--error-glow); }
+        .container.error-mode .verify-header { color: var(--error-color); }
+        .container.error-mode .result-msg { display: block; color: var(--error-color); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container" id="appContainer">
+        <!-- State 1: Login -->
+        <div class="state-panel" id="loginState">
+            <h1 class="title">Vocal-Vibe<br>Mobile Verification</h1>
+            <form id="mobileForm">
+                <input type="email" id="emailInput" class="input-field" placeholder="Enter Email" required>
+                <button type="submit" class="btn">Verify Device</button>
+            </form>
+            <p class="instruction">Keep your phone near the computer to complete secure verification.</p>
+        </div>
+
+        <!-- State 2: Verification -->
+        <div class="state-panel" id="verifyState">
+            <h2 class="verify-header" id="verifyHeader">Authenticating...</h2>
+            
+            <div class="status-box" id="statusLog"></div>
+
+            <div class="progress-wrapper">
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressBar"></div>
+                </div>
+                <div class="progress-text" id="progressPercent">0%</div>
+            </div>
+
+            <div class="graph-section">
+                <div class="graph-title">Signal Activity</div>
+                <div class="bars" id="signalBars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+            </div>
+
+            <div class="result-msg" id="resultMsg">Verification Complete</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('mobileForm');
+            const emailInput = document.getElementById('emailInput');
+            const container = document.getElementById('appContainer');
+            const statusLog = document.getElementById('statusLog');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const signalBars = document.getElementById('signalBars');
+            const resultMsg = document.getElementById('resultMsg');
+            const verifyHeader = document.getElementById('verifyHeader');
+
+            const steps = [
+                { msg: "Initializing system...", delay: 600, progress: 15, anim: false },
+                { msg: "Listening for ultrasonic signal...", delay: 1000, progress: 30, anim: true },
+                { msg: "Signal detected", delay: 800, progress: 45, anim: true },
+                { msg: "Decoding challenge...", delay: 900, progress: 60, anim: false },
+                { msg: "Generating secure response (HMAC)...", delay: 800, progress: 75, anim: false },
+                { msg: "Transmitting response...", delay: 1500, progress: 90, anim: true },
+                { msg: "Response sent successfully", delay: 500, progress: 100, anim: false }
+            ];
+
+            function addLog(text, className = 'active') {
+                const prev = statusLog.querySelector('.active');
+                if (prev) prev.classList.remove('active');
+
+                const div = document.createElement('div');
+                div.className = `log-item ${className}`;
+                div.textContent = `> ${text}`;
+                statusLog.appendChild(div);
+                statusLog.scrollTop = statusLog.scrollHeight;
+            }
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = emailInput.value.trim();
+                if(!email) return;
+
+                // Transition UI
+                container.classList.add('verifying');
+
+                // Start backend request
+                let fetchOk = false;
+                let resultStatus = "failed";
+
+                const backendPromise = fetch('/mobile_verify_start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                }).then(res => res.text()).then(text => {
+                    fetchOk = true;
+                    // Safely handle both string or json formats from app.py depending on how it's written
+                    resultStatus = text.toLowerCase().includes('success') ? 'success' : 'failed';
+                }).catch(err => {
+                    console.error("Connection error:", err);
+                    fetchOk = false;
+                });
+
+                // Run simulation steps
+                for (let i = 0; i < steps.length; i++) {
+                    const s = steps[i];
+                    if (s.anim) {
+                        signalBars.classList.add('animating');
+                    } else {
+                        signalBars.classList.remove('animating');
+                    }
+
+                    addLog(s.msg);
+                    progressBar.style.width = `${s.progress}%`;
+                    progressPercent.textContent = `${s.progress}%`;
+
+                    await new Promise(r => setTimeout(r, s.delay));
+                }
+
+                // Wait for actual backend response
+                await backendPromise;
+                
+                signalBars.classList.remove('animating');
+
+                if (fetchOk && resultStatus === 'success') {
+                    container.classList.add('success-mode');
+                    addLog("Workflow finished securely", "success");
+                    verifyHeader.textContent = "Success";
+                    resultMsg.textContent = "Verification Complete";
+                } else {
+                    container.classList.add('error-mode');
+                    addLog("Workflow failed or rejected", "error");
+                    verifyHeader.textContent = "Failed";
+                    resultMsg.textContent = "Verification Failed";
+                }
+            });
+        });
+    </script>
+</body>
+</html>

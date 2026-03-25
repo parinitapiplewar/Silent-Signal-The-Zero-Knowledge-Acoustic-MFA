@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocal-Vibe Authentication</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            --card-bg: rgba(30, 41, 59, 0.8);
+            --card-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-color: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --success-color: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.5);
+            --error-color: #ef4444;
+            --error-glow: rgba(239, 68, 68, 0.5);
+            --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            --transition-speed: 0.6s;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            max-width: 450px;
+            padding: 2rem;
+            transition: max-width var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+            gap: 2rem;
+        }
+
+        .container.active {
+            max-width: 1000px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            box-shadow: var(--shadow-lg);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            transition: all var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Login Panel */
+        .login-panel {
+            width: 100%;
+            flex-shrink: 0;
+        }
+
+        .container.active .login-panel {
+            width: 35%;
+            padding: 2rem 1.5rem;
+            transform: scale(0.95);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-field {
+            width: 100%;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        .btn:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--accent-glow);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Verification Panel */
+        .verification-panel {
+            width: 65%;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateX(20px);
+            display: none;
+        }
+
+        .container.active .verification-panel {
+            display: flex;
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+            transition: opacity 0.4s ease 0.3s, transform 0.4s ease 0.3s;
+        }
+
+        .status-header {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            box-shadow: 0 0 10px var(--accent-glow);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+
+        /* Log window */
+        .log-window {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1rem;
+            height: 160px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .log-entry {
+            color: var(--text-muted);
+            opacity: 0;
+            transform: translateY(10px);
+            animation: slideIn 0.3s forwards;
+        }
+
+        .log-entry.active {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .log-entry.success {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        .log-entry.error {
+            color: var(--error-color);
+            font-weight: bold;
+        }
+
+        @keyframes slideIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 2rem;
+        }
+
+        .progress-bar-bg {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-color);
+            border-radius: 4px;
+            transition: width 0.5s ease-out, background-color 0.3s;
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .progress-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Graph Section */
+        .graph-section {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1rem;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .graph-title {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .graph-container {
+            width: 100%;
+            height: 100px;
+            position: relative;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Success state modifiers */
+        .container.success .status-indicator {
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-glow);
+            animation: none;
+        }
+        
+        .container.success .progress-bar {
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-glow);
+        }
+        
+        .container.success .btn {
+            background: var(--success-color);
+            box-shadow: 0 4px 15px var(--success-glow);
+        }
+
+        /* Error state modifiers */
+        .container.error .status-indicator {
+            background: var(--error-color);
+            box-shadow: 0 0 10px var(--error-glow);
+            animation: none;
+        }
+        
+        .container.error .progress-bar {
+            background: var(--error-color);
+            box-shadow: 0 0 10px var(--error-glow);
+        }
+
+        .container.error .btn {
+            background: var(--error-color);
+            box-shadow: 0 4px 15px var(--error-glow);
+        }
+
+        @media (max-width: 768px) {
+            .container.active {
+                flex-direction: column;
+                max-width: 450px;
+            }
+            .container.active .login-panel {
+                width: 100%;
+            }
+            .container.active .verification-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" id="mainContainer">
+        <!-- Login Panel -->
+        <div class="card login-panel">
+            <div class="header">
+                <h1>Vocal-Vibe</h1>
+                <p>Authentication Interface</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <input type="text" class="input-field" placeholder="Enter Username or Email" required id="usernameInput">
+                </div>
+                <button type="submit" class="btn" id="loginBtn">Login</button>
+            </form>
+        </div>
+
+        <!-- Verification Panel -->
+        <div class="card verification-panel">
+            <div class="status-header">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusTitle">Verification Process</span>
+            </div>
+
+            <div class="log-window" id="logWindow"></div>
+
+            <div class="progress-container">
+                <div class="progress-bar-bg">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div class="progress-labels">
+                    <span id="progressText">Waiting...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+            </div>
+
+            <div class="graph-section">
+                <div class="graph-title">Ultrasonic Signal Activity</div>
+                <div class="graph-container">
+                    <canvas id="signalCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const loginForm = document.getElementById('loginForm');
+            const mainContainer = document.getElementById('mainContainer');
+            const loginBtn = document.getElementById('loginBtn');
+            const usernameInput = document.getElementById('usernameInput');
+            
+            const logWindow = document.getElementById('logWindow');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressPercent = document.getElementById('progressPercent');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusIndicator = document.getElementById('statusIndicator');
+
+            // Canvas Setup
+            const canvas = document.getElementById('signalCanvas');
+            const ctx = canvas.getContext('2d');
+            let animationId;
+            let isAnimating = false;
+
+            function resizeCanvas() {
+                const container = canvas.parentElement;
+                canvas.width = container.clientWidth;
+                canvas.height = container.clientHeight;
+                drawGraph(); 
+            }
+            
+            window.addEventListener('resize', resizeCanvas);
+            // Wait for styles to apply before sizing canvas
+            setTimeout(resizeCanvas, 100);
+
+            let time = 0;
+            function drawGraph() {
+                if (!isAnimating) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.beginPath();
+                    ctx.moveTo(0, canvas.height / 2);
+                    ctx.lineTo(canvas.width, canvas.height / 2);
+                    ctx.strokeStyle = 'rgba(59, 130, 246, 0.3)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    return;
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.beginPath();
+                
+                const amplitude = canvas.height / 3;
+                const frequency = 0.05;
+                
+                for (let x = 0; x < canvas.width; x++) {
+                    const y1 = Math.sin(x * frequency + time) * amplitude;
+                    const y2 = Math.sin(x * frequency * 2.5 - time * 1.5) * (amplitude / 2);
+                    const y3 = Math.sin(x * frequency * 0.5 + time * 2) * (amplitude / 4);
+                    
+                    const noise = (Math.random() - 0.5) * 5;
+                    
+                    const y = canvas.height / 2 + y1 + y2 + y3 + noise;
+                    
+                    if (x === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+                
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = 'rgba(59, 130, 246, 0.8)';
+                ctx.shadowBlur = 10;
+                ctx.stroke();
+                
+                time += 0.2;
+                animationId = requestAnimationFrame(drawGraph);
+            }
+
+            function startAnimation() {
+                if (!isAnimating) {
+                    isAnimating = true;
+                    drawGraph();
+                }
+            }
+
+            function stopAnimation() {
+                isAnimating = false;
+                cancelAnimationFrame(animationId);
+                drawGraph();
+            }
+
+            function addLogEntry(message, type = 'active') {
+                const prevActive = logWindow.querySelector('.active');
+                if (prevActive) {
+                    prevActive.classList.remove('active');
+                }
+
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `> ${message}`;
+                logWindow.appendChild(entry);
+                
+                logWindow.scrollTop = logWindow.scrollHeight;
+            }
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if(!usernameInput.value.trim()) return;
+
+                const email = usernameInput.value.trim();
+
+                usernameInput.disabled = true;
+                loginBtn.disabled = true;
+                loginBtn.textContent = 'Authenticating...';
+
+                mainContainer.classList.add('active');
+                
+                // Wait for the transition to finish so sizing is correct
+                await new Promise(r => setTimeout(r, 600));
+                resizeCanvas();
+
+                const phases = [
+                    { msg: "Initializing...", progress: 10, startAnim: false },
+                    { msg: "Generating challenge...", progress: 25, startAnim: false },
+                    { msg: "Encoding signal...", progress: 40, startAnim: false },
+                    { msg: "Transmitting...", progress: 65, startAnim: true },
+                    { msg: "Waiting for response...", progress: 80, startAnim: true },
+                    { msg: "Verifying...", progress: 95, startAnim: false }
+                ];
+
+                let fetchResultText = "";
+                const backendPromise = fetch('/start_verification', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email: email })
+                }).then(res => res.text())
+                  .then(text => { fetchResultText = text; })
+                  .catch(err => { console.error("Error connecting to backend:", err); });
+
+                for (let i = 0; i < phases.length; i++) {
+                    const phase = phases[i];
+                    addLogEntry(phase.msg);
+                    progressBar.style.width = `${phase.progress}%`;
+                    progressText.textContent = phase.msg;
+                    progressPercent.textContent = `${phase.progress}%`;
+                    
+                    if (phase.startAnim) {
+                        startAnimation();
+                    } else {
+                        stopAnimation();
+                    }
+
+                    // Simulate waiting for each step
+                    await new Promise(r => setTimeout(r, 800));
+                }
+
+                // Wait for backend to actually complete
+                await backendPromise;
+
+                // Final phase: Completed
+                addLogEntry("Completed");
+                progressBar.style.width = `100%`;
+                progressPercent.textContent = `100%`;
+                stopAnimation();
+
+                const isSuccess = fetchResultText && fetchResultText.toLowerCase().includes('success');
+
+                if (isSuccess) {
+                    addLogEntry("Authentication Successful", "success");
+                    progressText.textContent = "Authentication Successful";
+                    
+                    mainContainer.classList.remove('error');
+                    mainContainer.classList.add('success');
+                    statusTitle.textContent = "Authenticated";
+                    loginBtn.textContent = 'Success';
+                } else {
+                    addLogEntry("Authentication Failed", "error");
+                    progressText.textContent = "Authentication Failed";
+                    
+                    mainContainer.classList.remove('success');
+                    mainContainer.classList.add('error');
+                    statusTitle.textContent = "Failed";
+                    loginBtn.textContent = 'Failed';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
