@@ -1,25 +1,15 @@
-from detector import receive_signal
-from sound import send_signal
-from hmac_module import generate_hmac
+from rx import receive
+from tx import send
+from crypto import generate
 import time
 
-print("\n[RESPONDER] Waiting for challenge...")
+print("[RESPONDER] Waiting...")
 
-# Step 1: receive challenge
-challenge = receive_signal()
+challenge = receive()
 
 if challenge:
-    challenge = challenge.strip()
+    response = generate(challenge)
+    print("[RESPONDER] Response:", response)
 
-print(f"[RESPONDER] Challenge received: {challenge}")
-
-# Step 2: compute response
-response_full = generate_hmac(challenge)
-response = response_full[:8]   # truncate for reliability
-
-print(f"[RESPONDER] Sending response: {response}")
-
-time.sleep(1)
-
-# Step 3: send response
-send_signal(response)
+    time.sleep(1)
+    send(response)

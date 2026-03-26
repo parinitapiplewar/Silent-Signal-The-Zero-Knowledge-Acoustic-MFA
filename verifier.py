@@ -1,36 +1,19 @@
-from sound import send_signal
-from detector import receive_signal
-from hmac_module import verify_hmac
-from challenge import generate_challenge
-import time
+from tx import send
+from rx import receive
+from crypto import verify
+import secrets, time
 
-print("\n[VERIFIER] Starting system...")
+challenge = secrets.token_urlsafe(6)
 
-# Step 1: generate challenge
-challenge = generate_challenge()
-print(f"[VERIFIER] Challenge: {challenge}")
+print("[VERIFIER] Challenge:", challenge)
 
-time.sleep(1)
+time.sleep(2)
+send(challenge)
 
-# Step 2: send challenge
-print("[VERIFIER] Sending challenge...")
-send_signal(challenge)
+time.sleep(3)
+response = receive()
 
-time.sleep(1)
-
-# Step 3: receive response
-print("[VERIFIER] Waiting for response...")
-received = receive_signal()
-
-if received:
-    received = received.strip()
-
-print(f"[VERIFIER] Received: {received}")
-
-# Step 4: verify
-print("[VERIFIER] Verifying...")
-
-if verify_hmac(challenge, received):
-    print("\n AUTHENTICATED")
+if response and verify(challenge, response):
+    print("AUTHENTICATED")
 else:
-    print("\n REJECTED")
+    print("REJECTED")
