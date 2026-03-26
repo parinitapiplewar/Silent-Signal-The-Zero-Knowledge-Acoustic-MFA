@@ -1,32 +1,38 @@
-from sound import send_signal
+from sound import send_signal, encode_data
 from detector import receive_signal
 from hmac_module import verify_hmac
 from challenge import generate_challenge
 import time
 
 def run_verifier():
+    print("[VERIFIER] Verifier started")
     print("[VERIFIER] Generating challenge...")
     challenge = generate_challenge()
     
-    print(f"[VERIFIER] Challenge: {challenge}")
-    
     # Step 1: send challenge
-    print("[VERIFIER] Sending challenge...")
+    print("Challenge sent")
     send_signal(challenge)
     
     time.sleep(1)
     
     # Step 2: receive response
     print("[VERIFIER] Waiting for response...")
-    received = receive_signal()
+    received = receive_signal(duration=3)
+    
+    if not received:
+        print("[VERIFIER] Timeout or signal not detected")
+        print("Verification failure")
+        return {"status": "failed", "challenge": challenge, "binary_sent": encode_data(challenge)}
+        
     received=received.strip()
+    print("Response received")
     
     # Step 3: verify
     print("[VERIFIER] Verifying...")
     
     if verify_hmac(challenge, received):
-        print("AUTHENTICATED")
-        return "success"
+        print("Verification success")
+        return {"status": "success", "challenge": challenge, "binary_sent": encode_data(challenge)}
     else:
-        print("REJECTED")
-        return "failed"
+        print("Verification failure")
+        return {"status": "failed", "challenge": challenge, "binary_sent": encode_data(challenge)}

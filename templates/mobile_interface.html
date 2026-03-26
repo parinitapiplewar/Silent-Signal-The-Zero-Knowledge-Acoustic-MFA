@@ -274,6 +274,41 @@
         .container.error-mode .verify-header { color: var(--error-color); }
         .container.error-mode .result-msg { display: block; color: var(--error-color); }
 
+        /* Debug Section */
+        .debug-section {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            text-align: left;
+        }
+
+        .debug-header {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+
+        .debug-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 0.85rem;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.8rem;
+            color: var(--accent-color);
+            max-height: 120px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        
+        .debug-box div { margin-bottom: 0.5rem; }
+        .debug-box span.label { color: var(--text-muted); }
+        .debug-box span.val { color: var(--text-main); }
     </style>
 </head>
 <body>
@@ -318,6 +353,16 @@
             </div>
 
             <div class="result-msg" id="resultMsg">Verification Complete</div>
+
+            <!-- New Reception Debug -->
+            <div class="debug-section" id="receptionDebug" style="display: none;">
+                <div class="debug-header">Reception Debug</div>
+                <div class="debug-box" id="debugBox">
+                    <div><span class="label">Received Binary:</span> <span class="val" id="received-binary"></span></div>
+                    <div><span class="label">Decoded Challenge:</span> <span class="val" id="decoded-challenge"></span></div>
+                    <div><span class="label">HMAC:</span> <span class="val" id="generated-hmac"></span></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -363,6 +408,7 @@
                 container.classList.add('verifying');
 
                 // Start backend request
+                let jobId = null;
                 let fetchOk = false;
                 let resultStatus = "failed";
 
@@ -370,10 +416,9 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email })
-                }).then(res => res.text()).then(text => {
+                }).then(res => res.json()).then(data => {
                     fetchOk = true;
-                    // Safely handle both string or json formats from app.py depending on how it's written
-                    resultStatus = text.toLowerCase().includes('success') ? 'success' : 'failed';
+                    jobId = data.job_id;
                 }).catch(err => {
                     console.error("Connection error:", err);
                     fetchOk = false;
@@ -398,6 +443,28 @@
                 // Wait for actual backend response
                 await backendPromise;
                 
+                let debugData = null;
+                while (jobId) {
+                    try {
+                        let res = await fetch(`/status/${jobId}`);
+                        let data = await res.json();
+                        console.log("Debug Response:", data); // Print returned JSON
+                        
+                        if (data.status === 'success' || data.status === 'failed') {
+                            resultStatus = data.status;
+                            debugData = data;
+                            break;
+                        } else if (data.status === 'completed') {
+                            resultStatus = data.result.status || data.result;
+                            debugData = data.result;
+                            break;
+                        } else if (data.status === 'error') {
+                            break;
+                        }
+                    } catch(e) { break; }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                
                 signalBars.classList.remove('animating');
 
                 if (fetchOk && resultStatus === 'success') {
@@ -410,6 +477,15 @@
                     addLog("Workflow failed or rejected", "error");
                     verifyHeader.textContent = "Failed";
                     resultMsg.textContent = "Verification Failed";
+                }
+
+                if (debugData && debugData.received_binary) {
+                    console.log("Updating UI with debug data:", debugData);
+                    const debugSec = document.getElementById('receptionDebug');
+                    debugSec.style.display = 'block';
+                    document.getElementById('received-binary').textContent = debugData.received_binary || '';
+                    document.getElementById('decoded-challenge').textContent = debugData.decoded_challenge || '';
+                    document.getElementById('generated-hmac').textContent = debugData.hmac || '';
                 }
             });
         });

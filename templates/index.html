@@ -282,6 +282,40 @@
             display: block;
         }
 
+        /* Debug Section */
+        .debug-section {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .debug-title {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .debug-box {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            color: #38bdf8;
+            max-height: 120px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        
+        .debug-box div { margin-bottom: 0.5rem; }
+        .debug-box span.label { color: #94a3b8; }
+        .debug-box span.val { color: var(--text-main); }
+
         /* Success state modifiers */
         .container.success .status-indicator {
             background: var(--success-color);
@@ -370,6 +404,14 @@
                 <div class="graph-title">Ultrasonic Signal Activity</div>
                 <div class="graph-container">
                     <canvas id="signalCanvas"></canvas>
+                </div>
+            </div>
+
+            <div class="debug-section" id="transmissionDebug" style="display: none;">
+                <div class="debug-title">Transmission Debug</div>
+                <div class="debug-box" id="debugBox">
+                    <div><span class="label">Challenge:</span> <span class="val" id="sent-challenge"></span></div>
+                    <div><span class="label">Sent Binary:</span> <span class="val" id="sent-binary"></span></div>
                 </div>
             </div>
         </div>
@@ -504,15 +546,13 @@
                     { msg: "Verifying...", progress: 95, startAnim: false }
                 ];
 
-                let fetchResultText = "";
+                let jobId = null;
                 const backendPromise = fetch('/start_verification', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: email })
-                }).then(res => res.text())
-                  .then(text => { fetchResultText = text; })
+                }).then(res => res.json())
+                  .then(data => { jobId = data.job_id; })
                   .catch(err => { console.error("Error connecting to backend:", err); });
 
                 for (let i = 0; i < phases.length; i++) {
@@ -535,13 +575,36 @@
                 // Wait for backend to actually complete
                 await backendPromise;
 
+                let resultStatus = "failed";
+                let debugData = null;
+                while (jobId) {
+                    try {
+                        let res = await fetch(`/status/${jobId}`);
+                        let data = await res.json();
+                        console.log("Debug Response:", data); // Print returned JSON
+                        
+                        if (data.status === 'success' || data.status === 'failed') {
+                            resultStatus = data.status;
+                            debugData = data;
+                            break;
+                        } else if (data.status === 'completed') {
+                            resultStatus = data.result.status || data.result;
+                            debugData = data.result;
+                            break;
+                        } else if (data.status === 'error') {
+                            break;
+                        }
+                    } catch(e) { break; }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
                 // Final phase: Completed
                 addLogEntry("Completed");
                 progressBar.style.width = `100%`;
                 progressPercent.textContent = `100%`;
                 stopAnimation();
 
-                const isSuccess = fetchResultText && fetchResultText.toLowerCase().includes('success');
+                const isSuccess = resultStatus === 'success';
 
                 if (isSuccess) {
                     addLogEntry("Authentication Successful", "success");
@@ -559,6 +622,14 @@
                     mainContainer.classList.add('error');
                     statusTitle.textContent = "Failed";
                     loginBtn.textContent = 'Failed';
+                }
+
+                if (debugData && debugData.binary_sent) {
+                    console.log("Updating UI with debug data:", debugData);
+                    const debugSection = document.getElementById('transmissionDebug');
+                    debugSection.style.display = 'flex';
+                    document.getElementById('sent-challenge').textContent = debugData.challenge || '';
+                    document.getElementById('sent-binary').textContent = debugData.binary_sent || '';
                 }
             });
         });

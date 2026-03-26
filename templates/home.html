@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vocal-Vibe Authentication System</title>
+    <!-- Use Inter font for modern UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            /* Dark gradient background */
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            /* Center vertically and horizontally */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(30, 41, 59, 0.6);
+            padding: 3.5rem 2.5rem;
+            border-radius: 24px;
+            /* Glow and shadow effects */
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 30px rgba(56, 189, 248, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            width: 100%;
+            max-width: 500px;
+            margin: 1.5rem;
+        }
+
+        .header {
+            margin-bottom: 3rem;
+        }
+
+        .title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            /* Gradient text */
+            background: linear-gradient(90deg, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            font-weight: 400;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .btn {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            padding: 1.25rem 2rem;
+            font-size: 1.15rem;
+            font-weight: 600;
+            text-decoration: none;
+            color: #ffffff;
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            /* Rounded corners */
+            border-radius: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            /* Subtle shadows */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Hover effects */
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(56, 189, 248, 0.25);
+            border-color: rgba(56, 189, 248, 0.6);
+            background: rgba(56, 189, 248, 0.15);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn.responder {
+            background: rgba(167, 139, 250, 0.05);
+            border-color: rgba(167, 139, 250, 0.2);
+        }
+
+        .btn.responder:hover {
+            box-shadow: 0 10px 25px rgba(167, 139, 250, 0.25);
+            border-color: rgba(167, 139, 250, 0.6);
+            background: rgba(167, 139, 250, 0.15);
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 480px) {
+            .container {
+                padding: 2.5rem 1.5rem;
+                margin: 1rem;
+            }
+            .title {
+                font-size: 1.6rem;
+            }
+            .subtitle {
+                font-size: 1rem;
+            }
+            .btn {
+                font-size: 1.05rem;
+                padding: 1rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <!-- Title -->
+            <h1 class="title">Vocal-Vibe Authentication System</h1>
+            <!-- Subtitle -->
+            <p class="subtitle">Select your role to proceed</p>
+        </div>
+        
+        <div class="btn-group">
+            <!-- Connection to routes -->
+            <a href="/verifier" class="btn">Start as Verifier (PC)</a>
+            <a href="/responder" class="btn responder">Start as Responder (Mobile)</a>
+        </div>
+    </div>
+</body>
+</html>
