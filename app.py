@@ -47,14 +47,14 @@ def start_verification():
 @app.route('/mobile_verify_start', methods=['POST'])
 def mobile_verify_start():
     print("Responder verification started")
-    job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "running"}
     
-    # Execute immediately in a non-blocking thread without calling .join()
-    t = threading.Thread(target=async_task, args=(job_id, run_responder))
-    t.start()
+    # Execute synchronously to guarantee the responder has completed processing
+    result = run_responder()
     
-    return jsonify({"job_id": job_id})
+    if isinstance(result, dict):
+        return jsonify(result)
+    else:
+        return jsonify({"status": result})
 
 @app.route('/status/<job_id>', methods=['GET'])
 def get_status(job_id):

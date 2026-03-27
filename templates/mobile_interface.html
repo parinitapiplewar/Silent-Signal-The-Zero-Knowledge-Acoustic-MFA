@@ -363,6 +363,15 @@
                     <div><span class="label">HMAC:</span> <span class="val" id="generated-hmac"></span></div>
                 </div>
             </div>
+
+            <!-- New Live Detection Debug -->
+            <div class="debug-section" id="liveDetectionDebug" style="display: none;">
+                <div class="debug-header">Live Detection Debug</div>
+                <div class="debug-box" id="liveDebugBox">
+                    <div><span class="label">Detected Frequencies:</span> <span class="val" id="detected-freqs"></span></div>
+                    <div><span class="label">Detected Bits:</span> <span class="val" id="detected-bits"></span></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -408,9 +417,9 @@
                 container.classList.add('verifying');
 
                 // Start backend request
-                let jobId = null;
                 let fetchOk = false;
                 let resultStatus = "failed";
+                let debugData = null;
 
                 const backendPromise = fetch('/mobile_verify_start', {
                     method: 'POST',
@@ -418,7 +427,9 @@
                     body: JSON.stringify({ email })
                 }).then(res => res.json()).then(data => {
                     fetchOk = true;
-                    jobId = data.job_id;
+                    console.log("Debug Response:", data);
+                    resultStatus = data.status || 'success';
+                    debugData = data;
                 }).catch(err => {
                     console.error("Connection error:", err);
                     fetchOk = false;
@@ -443,28 +454,6 @@
                 // Wait for actual backend response
                 await backendPromise;
                 
-                let debugData = null;
-                while (jobId) {
-                    try {
-                        let res = await fetch(`/status/${jobId}`);
-                        let data = await res.json();
-                        console.log("Debug Response:", data); // Print returned JSON
-                        
-                        if (data.status === 'success' || data.status === 'failed') {
-                            resultStatus = data.status;
-                            debugData = data;
-                            break;
-                        } else if (data.status === 'completed') {
-                            resultStatus = data.result.status || data.result;
-                            debugData = data.result;
-                            break;
-                        } else if (data.status === 'error') {
-                            break;
-                        }
-                    } catch(e) { break; }
-                    await new Promise(r => setTimeout(r, 1000));
-                }
-                
                 signalBars.classList.remove('animating');
 
                 if (fetchOk && resultStatus === 'success') {
@@ -479,13 +468,20 @@
                     resultMsg.textContent = "Verification Failed";
                 }
 
-                if (debugData && debugData.received_binary) {
+                if (debugData && debugData.received_binary !== undefined) {
                     console.log("Updating UI with debug data:", debugData);
                     const debugSec = document.getElementById('receptionDebug');
                     debugSec.style.display = 'block';
-                    document.getElementById('received-binary').textContent = debugData.received_binary || '';
-                    document.getElementById('decoded-challenge').textContent = debugData.decoded_challenge || '';
-                    document.getElementById('generated-hmac').textContent = debugData.hmac || '';
+                    document.getElementById('received-binary').textContent = debugData.received_binary || 'None';
+                    document.getElementById('decoded-challenge').textContent = debugData.decoded_challenge || 'None';
+                    document.getElementById('generated-hmac').textContent = debugData.hmac || 'None';
+                }
+
+                if (debugData && debugData.detected_freqs) {
+                    const liveSec = document.getElementById('liveDetectionDebug');
+                    liveSec.style.display = 'block';
+                    document.getElementById('detected-freqs').textContent = debugData.detected_freqs.join(', ');
+                    document.getElementById('detected-bits').textContent = debugData.detected_bits.join(', ');
                 }
             });
         });

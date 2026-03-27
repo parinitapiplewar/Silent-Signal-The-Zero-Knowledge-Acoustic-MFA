@@ -17,7 +17,7 @@ def run_verifier():
     
     # Step 2: receive response
     print("[VERIFIER] Waiting for response...")
-    received = receive_signal(duration=3)
+    received, _, _, _ = receive_signal(duration=60)
     
     if not received:
         print("[VERIFIER] Timeout or signal not detected")
