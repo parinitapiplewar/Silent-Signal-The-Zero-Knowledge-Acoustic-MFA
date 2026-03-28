@@ -2,7 +2,7 @@ import numpy as np
 import sounddevice as sd
 import time
 FS = 44100
-DURATION = 0.3
+DURATION = 0.5
 freq_one = 8000
 freq_zero = 6000
 freq_start = 4000
@@ -27,7 +27,7 @@ def send_signal(data):
     print(f"[TX] Sending START marker at {freq_start} Hz")
     sd.play(generate_tone(freq_start), FS)
     sd.wait()
-    time.sleep(0.2)
+    time.sleep(0.3)
 
     for bit in binary:
         freq = freq_one if bit == '1' else freq_zero
@@ -35,10 +35,10 @@ def send_signal(data):
         tone = generate_tone(freq)
         sd.play(tone, FS)
         sd.wait()
-        time.sleep(0.2)
+        time.sleep(0.3)
 
     # Send Terminator (End Marker)
     print(f"[TX] Sending END marker at {freq_end} Hz")
     sd.play(generate_tone(freq_end), FS)
     sd.wait()
-    time.sleep(0.2)
+    time.sleep(0.3)
