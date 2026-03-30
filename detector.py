@@ -7,7 +7,8 @@ import time
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-CHUNK = 1024
+CHUNK = 512
+
 
 BANDS = {
     '1': (7500, 9000),
@@ -121,40 +122,41 @@ def receive_signal(duration=60):
         if len(symbol_buffer) > 15:
             symbol_buffer.pop(0)
 
-        # N=4 Bit Stability
-        recent_4 = symbol_buffer[-4:] if len(symbol_buffer) >= 4 else symbol_buffer
-        symbols_4 = [s[0] for s in recent_4]
-        is_stable_4 = len(symbols_4) == 4 and all(s == symbols_4[0] for s in symbols_4)
+        # N=2 Bit Stability (approx 23ms)
+        recent_2 = symbol_buffer[-2:] if len(symbol_buffer) >= 2 else symbol_buffer
+        symbols_2 = [s[0] for s in recent_2]
+        is_stable_2 = len(symbols_2) == 2 and all(s == symbols_2[0] for s in symbols_2)
         
-        # N=9 Marker Stability (approx 200ms)
-        recent_9 = symbol_buffer[-9:] if len(symbol_buffer) >= 9 else symbol_buffer
-        symbols_9 = [s[0] for s in recent_9]
-        is_stable_9 = len(symbols_9) == 9 and all(s == symbols_9[0] for s in symbols_9)
+        # N=6 Marker Stability (approx 70ms)
+        recent_6 = symbol_buffer[-6:] if len(symbol_buffer) >= 6 else symbol_buffer
+        symbols_6 = [s[0] for s in recent_6]
+        is_stable_6 = len(symbols_6) == 6 and all(s == symbols_6[0] for s in symbols_6)
 
         stable_symbol = None
-        if is_stable_4 and symbols_4[0] is not None:
-            max_e = max(s[1] for s in recent_4)
-            min_e = min(s[1] for s in recent_4)
+        if is_stable_2 and symbols_2[0] is not None:
+            max_e = max(s[1] for s in recent_2)
+            min_e = min(s[1] for s in recent_2)
             is_energy_stable = (max_e - min_e) / (max_e + 1e-6) < 0.5
             if is_energy_stable:
-                stable_symbol = symbols_4[0]
+                stable_symbol = symbols_2[0]
                 
-        if is_stable_4 and symbols_4[0] is None:
+        if is_stable_2 and symbols_2[0] is None:
             stable_symbol = None
+
 
         if stable_symbol is None:
             waiting_for_gap = False
 
         if state == STATE_WAITING:
-            if is_stable_9 and symbols_9[0] == 'S':
-                print("START detected (\u2265 200ms stability)")
+            if is_stable_6 and symbols_6[0] == 'S':
+                print("START detected (\u2265 70ms stability)")
                 print("STATE \u2192 RECEIVING")
                 state = STATE_RECEIVING
                 waiting_for_gap = True
 
         elif state == STATE_RECEIVING:
-            if is_stable_9 and symbols_9[0] == 'E':
-                print("END detected (\u2265 200ms stability)")
+            if is_stable_6 and symbols_6[0] == 'E':
+                print("END detected (\u2265 70ms stability)")
                 state = STATE_COMPLETED
 
             elif stable_symbol in ['0', '1']:
@@ -165,6 +167,7 @@ def receive_signal(duration=60):
             
             elif stable_symbol == 'S':
                 pass # Ignore further START markers
+
 
     stream.stop_stream()
     stream.close()

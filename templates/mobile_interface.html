@@ -417,6 +417,7 @@
                 container.classList.add('verifying');
 
                 // Start backend request
+                let fetchFinished = false;
                 let fetchOk = false;
                 let resultStatus = "failed";
                 let debugData = null;
@@ -430,29 +431,50 @@
                     console.log("Debug Response:", data);
                     resultStatus = data.status || 'success';
                     debugData = data;
+                    fetchFinished = true;
                 }).catch(err => {
                     console.error("Connection error:", err);
                     fetchOk = false;
+                    fetchFinished = true;
                 });
 
-                // Run simulation steps
-                for (let i = 0; i < steps.length; i++) {
+                // Run initial simulation steps
+                for (let i = 0; i < 2; i++) {
                     const s = steps[i];
-                    if (s.anim) {
-                        signalBars.classList.add('animating');
-                    } else {
-                        signalBars.classList.remove('animating');
-                    }
-
+                    if (s.anim) signalBars.classList.add('animating');
+                    else signalBars.classList.remove('animating');
                     addLog(s.msg);
                     progressBar.style.width = `${s.progress}%`;
                     progressPercent.textContent = `${s.progress}%`;
-
                     await new Promise(r => setTimeout(r, s.delay));
                 }
 
-                // Wait for actual backend response
+                // Wait for actual backend response at "Listening..." stage
                 await backendPromise;
+                
+                // If signal was not detected at all, show disruption error
+                if (resultStatus === 'failed' && (!debugData || !debugData.received_binary || debugData.received_binary === "None" || debugData.received_binary === "")) {
+                    signalBars.classList.remove('animating');
+                    container.classList.add('error-mode');
+                    addLog("SIGNAL DISRUPTED", "error");
+                    addLog("No ultrasonic signature detected", "error");
+                    verifyHeader.textContent = "Signal Lost";
+                    resultMsg.textContent = "Authentication Disrupted";
+                    
+                    if (debugData) updateDebug(debugData);
+                    return; 
+                }
+
+                // Continue simulation for the rest of the steps if signal was found
+                for (let i = 2; i < steps.length; i++) {
+                    const s = steps[i];
+                    if (s.anim) signalBars.classList.add('animating');
+                    else signalBars.classList.remove('animating');
+                    addLog(s.msg);
+                    progressBar.style.width = `${s.progress}%`;
+                    progressPercent.textContent = `${s.progress}%`;
+                    await new Promise(r => setTimeout(r, s.delay));
+                }
                 
                 signalBars.classList.remove('animating');
 
@@ -463,13 +485,16 @@
                     resultMsg.textContent = "Verification Complete";
                 } else {
                     container.classList.add('error-mode');
-                    addLog("Workflow failed or rejected", "error");
+                    addLog("Verification failed", "error");
                     verifyHeader.textContent = "Failed";
                     resultMsg.textContent = "Verification Failed";
                 }
 
-                if (debugData && debugData.received_binary !== undefined) {
-                    console.log("Updating UI with debug data:", debugData);
+                if (debugData) updateDebug(debugData);
+            });
+
+            function updateDebug(debugData) {
+                if (debugData.received_binary !== undefined) {
                     const debugSec = document.getElementById('receptionDebug');
                     debugSec.style.display = 'block';
                     document.getElementById('received-binary').textContent = debugData.received_binary || 'None';
@@ -477,14 +502,15 @@
                     document.getElementById('generated-hmac').textContent = debugData.hmac || 'None';
                 }
 
-                if (debugData && debugData.detected_freqs) {
+                if (debugData.detected_freqs) {
                     const liveSec = document.getElementById('liveDetectionDebug');
                     liveSec.style.display = 'block';
                     document.getElementById('detected-freqs').textContent = debugData.detected_freqs.join(', ');
                     document.getElementById('detected-bits').textContent = debugData.detected_bits.join(', ');
                 }
-            });
+            }
         });
+
     </script>
 </body>
 </html>
