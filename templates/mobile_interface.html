@@ -319,7 +319,7 @@
             <h1 class="title">Vocal-Vibe<br>Mobile Verification</h1>
             <form id="mobileForm">
                 <input type="email" id="emailInput" class="input-field" placeholder="Enter Email" required>
-                <button type="submit" class="btn">Verify Device</button>
+                <button type="submit" id="verifyBtn" class="btn">Verify Device</button>
             </form>
             <p class="instruction">Keep your phone near the computer to complete secure verification.</p>
         </div>
@@ -414,8 +414,32 @@
             }
 
             async start() {
+                // Step 5: Log full environment
+                console.log("Protocol:", location.protocol);
+                console.log("Host:", location.host);
+                console.log("Secure Context:", window.isSecureContext);
+
+                // Step 3: Add browser capability check BEFORE mic
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    alert("getUserMedia NOT supported in this browser");
+                    return false;
+                }
+
+                // Step 4: Add secure context check
+                if (!window.isSecureContext) {
+                    alert("Not a secure context (HTTPS or localhost required)");
+                }
+
                 try {
-                    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    // Step 6: Reduce constraints (avoid device issues)
+                    this.stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        }
+                    });
+
                     this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     const source = this.audioCtx.createMediaStreamSource(this.stream);
                     this.analyser = this.audioCtx.createAnalyser();
@@ -425,7 +449,9 @@
                     this.loop();
                     return true;
                 } catch (err) {
-                    console.error("Mic access error:", err);
+                    // Step 1 — Remove silent failure
+                    console.error("MIC ERROR:", err);
+                    alert("MIC ERROR: " + err.name + " - " + err.message);
                     return false;
                 }
             }
@@ -539,73 +565,81 @@
                 statusLog.scrollTop = statusLog.scrollHeight;
             }
 
-            form.addEventListener('submit', async (e) => {
+            // Step 2: Force permission via USER ACTION
+            // Using ID check to ensure direct button link
+            document.getElementById("verifyBtn").addEventListener('click', async (e) => {
+                // Since it's a submit button, we still want to prevent default and handle the flow
+                const form = document.getElementById('mobileForm');
+                if (!form.checkValidity()) return; 
+                
                 e.preventDefault();
                 const email = emailInput.value.trim();
-                if(!email) return;
-
+                
                 container.classList.add('verifying');
                 addLog("Initializing microphone...");
                 progressBar.style.width = "10%";
 
-                receiver = new AcousticReceiver(async (type, data) => {
-                    if (type === 'START') {
-                        addLog("Signal START detected", "success");
-                        signalBars.classList.add('animating');
-                        progressBar.style.width = "30%";
-                    } else if (type === 'BIT') {
-                        // Optional: update UI for each bit
-                        document.getElementById('detected-bits').textContent += data;
-                    } else if (type === 'END') {
-                        addLog("Signal END detected", "success");
-                        signalBars.classList.remove('animating');
-                        progressBar.style.width = "60%";
-                        
-                        const { binary, str } = data;
-                        console.log("Decoded:", str);
-                        addLog("Challenge decoded: " + str);
-                        
-                        document.getElementById('receptionDebug').style.display = 'block';
-                        document.getElementById('received-binary').textContent = binary;
-                        document.getElementById('decoded-challenge').textContent = str;
-
-                        // Calculate HMAC
-                        addLog("Generating HMAC...");
-                        const hmac = await generateHMAC(str);
-                        document.getElementById('generated-hmac').textContent = hmac;
-
-                        // POST to backend
-                        addLog("Submitting verification...");
-                        try {
-                            const res = await fetch('/mobile_verify', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ email, hmac })
-                            });
-                            const result = await res.json();
+                if (!receiver) {
+                    receiver = new AcousticReceiver(async (type, data) => {
+                        if (type === 'START') {
+                            addLog("Signal START detected", "success");
+                            signalBars.classList.add('animating');
+                            progressBar.style.width = "30%";
+                        } else if (type === 'BIT') {
+                            // Optional: update UI for each bit
+                            document.getElementById('detected-bits').textContent += data;
+                        } else if (type === 'END') {
+                            addLog("Signal END detected", "success");
+                            signalBars.classList.remove('animating');
+                            progressBar.style.width = "60%";
                             
-                            if (result.status === 'success') {
-                                addLog("Verification SUCCESS", "success");
-                                container.classList.add('success-mode');
-                                verifyHeader.textContent = "Success";
-                            } else {
-                                addLog("Verification FAILED: " + (result.message || ""), "error");
-                                container.classList.add('error-mode');
-                                verifyHeader.textContent = "Failed";
-                            }
-                        } catch (err) {
-                            addLog("Network error submitting HMAC", "error");
-                        }
-                        
-                        receiver.stop();
-                        progressBar.style.width = "100%";
-                        progressPercent.textContent = "100%";
-                    }
-                });
+                            const { binary, str } = data;
+                            console.log("Decoded:", str);
+                            addLog("Challenge decoded: " + str);
+                            
+                            document.getElementById('receptionDebug').style.display = 'block';
+                            document.getElementById('received-binary').textContent = binary;
+                            document.getElementById('decoded-challenge').textContent = str;
 
+                            // Calculate HMAC
+                            addLog("Generating HMAC...");
+                            const hmac = await generateHMAC(str);
+                            document.getElementById('generated-hmac').textContent = hmac;
+
+                            // POST to backend
+                            addLog("Submitting verification...");
+                            try {
+                                const res = await fetch('/mobile_verify', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ email, hmac })
+                                });
+                                const result = await res.json();
+                                
+                                if (result.status === 'success') {
+                                    addLog("Verification SUCCESS", "success");
+                                    container.classList.add('success-mode');
+                                    verifyHeader.textContent = "Success";
+                                } else {
+                                    addLog("Verification FAILED: " + (result.message || ""), "error");
+                                    container.classList.add('error-mode');
+                                    verifyHeader.textContent = "Failed";
+                                }
+                            } catch (err) {
+                                addLog("Network error submitting HMAC", "error");
+                            }
+                            
+                            receiver.stop();
+                            progressBar.style.width = "100%";
+                            progressPercent.textContent = "100%";
+                        }
+                    });
+                }
+
+                addLog("Requesting microphone...");
                 const started = await receiver.start();
                 if (!started) {
-                    addLog("Mic access denied or error", "error");
+                    addLog("Mic failed: see alerts for details", "error");
                     return;
                 }
 
