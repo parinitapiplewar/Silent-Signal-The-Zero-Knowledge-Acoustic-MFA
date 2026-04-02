@@ -236,25 +236,7 @@
             transition: height 0.2s ease;
         }
 
-        .animating .bar {
-            animation: bounce 0.8s infinite alternate ease-in-out;
-            opacity: 0.9;
-        }
-
-        .bar:nth-child(1) { animation-delay: 0.0s; }
-        .bar:nth-child(2) { animation-delay: 0.15s; }
-        .bar:nth-child(3) { animation-delay: 0.3s; }
-        .bar:nth-child(4) { animation-delay: 0.45s; }
-        .bar:nth-child(5) { animation-delay: 0.6s; }
-        .bar:nth-child(6) { animation-delay: 0.75s; }
-        .bar:nth-child(7) { animation-delay: 0.9s; }
-        .bar:nth-child(8) { animation-delay: 1.05s; }
-        .bar:nth-child(9) { animation-delay: 1.2s; }
-
-        @keyframes bounce {
-            0% { height: 15%; }
-            100% { height: 100%; }
-        }
+        /* Removed .animating .bar bounce animation - now controlled via JS */
 
         /* Final result state */
         .result-msg {
@@ -319,7 +301,7 @@
             <h1 class="title">Vocal-Vibe<br>Mobile Verification</h1>
             <form id="mobileForm">
                 <input type="email" id="emailInput" class="input-field" placeholder="Enter Email" required>
-                <button type="submit" id="verifyBtn" class="btn">Verify Device</button>
+                <button type="submit" class="btn">Verify Device</button>
             </form>
             <p class="instruction">Keep your phone near the computer to complete secure verification.</p>
         </div>
@@ -365,13 +347,11 @@
             </div>
 
             <!-- New Live Detection Debug -->
-            <div class="debug-section" id="liveDetectionDebug" style="display: none;">
                 <div class="debug-header">Live Detection Debug</div>
                 <div class="debug-box" id="liveDebugBox">
-                    <div><span class="label">Detected Frequencies:</span> <span class="val" id="detected-freqs"></span></div>
-                    <div><span class="label">Detected Bits:</span> <span class="val" id="detected-bits"></span></div>
+                    <div><span class="label">Detected Frequencies:</span> <span class="val" id="freqDebug">None</span></div>
+                    <div><span class="label">Detected Bits:</span> <span class="val" id="bitDebug">None</span></div>
                 </div>
-            </div>
         </div>
     </div>
 
@@ -401,57 +381,36 @@
                 this.analyser = null;
                 this.stream = null;
                 this.bands = {
-                    'END':   [1200, 2000],
-                    'START': [1800, 2600],
-                    '0':     [2500, 3500],
-                    '1':     [3500, 5000]
+                    'E': [1500, 3000], // END: 2000Hz
+                    'S': [3500, 5000], // START: 4000Hz
+                    '0': [5000, 7000], // ZERO: 6000Hz
+                    '1': [7000, 9500]  // ONE: 8000Hz
                 };
-                this.state = 'WAITING'; // WAITING, RECEIVING, COMPLETED
-                this.bits = [];
+                this.isListening = false;
+                this.detectedFrequencies = [];
+                this.detectedBits = [];
+                this.receivedBinary = "";
                 this.lastStableSym = null;
                 this.stableCount = 0;
-                this.isListening = false;
             }
 
             async start() {
-                // Step 5: Log full environment
-                console.log("Protocol:", location.protocol);
-                console.log("Host:", location.host);
-                console.log("Secure Context:", window.isSecureContext);
-
-                // Step 3: Add browser capability check BEFORE mic
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                    alert("getUserMedia NOT supported in this browser");
-                    return false;
-                }
-
-                // Step 4: Add secure context check
-                if (!window.isSecureContext) {
-                    alert("Not a secure context (HTTPS or localhost required)");
-                }
-
                 try {
-                    // Step 6: Reduce constraints (avoid device issues)
-                    this.stream = await navigator.mediaDevices.getUserMedia({
-                        audio: {
-                            echoCancellation: false,
-                            noiseSuppression: false,
-                            autoGainControl: false
-                        }
-                    });
-
+                    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                     const source = this.audioCtx.createMediaStreamSource(this.stream);
                     this.analyser = this.audioCtx.createAnalyser();
-                    this.analyser.fftSize = 2048;
+                    this.analyser.fftSize = 4096;
+                    this.dataArray = new Float32Array(this.analyser.frequencyBinCount);
                     source.connect(this.analyser);
+                    
                     this.isListening = true;
-                    this.loop();
+                    this.detectedFrequencies = [];
+                    this.detectedBits = [];
+                    this.detectLoop();
                     return true;
                 } catch (err) {
-                    // Step 1 — Remove silent failure
-                    console.error("MIC ERROR:", err);
-                    alert("MIC ERROR: " + err.name + " - " + err.message);
+                    console.error("Mic access error:", err);
                     return false;
                 }
             }
@@ -462,74 +421,127 @@
                 if (this.audioCtx) this.audioCtx.close();
             }
 
-            getBandEnergy(dataArray, lowFreq, highFreq) {
-                const sampleRate = this.audioCtx.sampleRate;
-                const fftSize = this.analyser.fftSize;
-                const lowBin = Math.round(lowFreq / (sampleRate / fftSize));
-                const highBin = Math.round(highFreq / (sampleRate / fftSize));
-                
-                let energy = 0;
-                for (let i = lowBin; i <= highBin; i++) {
-                    energy += dataArray[i];
-                }
-                return energy / (highBin - lowBin + 1);
-            }
-
-            loop() {
+            detectLoop() {
                 if (!this.isListening) return;
 
-                const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-                this.analyser.getByteFrequencyData(dataArray);
+                this.analyser.getFloatFrequencyData(this.dataArray);
+                
+                // Real-time visualization for feedback
+                this.updateVisuals(this.dataArray);
 
-                let maxEnergy = 0;
-                let detectedSym = null;
+                const freq = this.getDominantFrequency(this.dataArray);
+                const sym = this.classifyFrequency(freq);
 
-                for (const [sym, range] of Object.entries(this.bands)) {
-                    const energy = this.getBandEnergy(dataArray, range[0], range[1]);
-                    if (energy > maxEnergy && energy > 40) { // Threshold
-                        maxEnergy = energy;
-                        detectedSym = sym;
+                if (freq > 1000) { // Only track meaningful frequencies
+                    this.detectedFrequencies.push(Math.round(freq));
+                }
+
+                if (sym) {
+                    if (sym === this.lastStableSym) {
+                        this.stableCount++;
+                    } else {
+                        this.lastStableSym = sym;
+                        this.stableCount = 0;
+                    }
+
+                    // Stability threshold (~4 frames)
+                    if (this.stableCount === 4) {
+                        this.handleSymbol(sym);
+                    }
+                } else {
+                    this.stableCount = 0;
+                    this.lastStableSym = null;
+                }
+
+                requestAnimationFrame(this.detectLoop.bind(this));
+            }
+
+            getDominantFrequency(dataArray) {
+                let maxMag = -Infinity;
+                let maxIndex = -1;
+                
+                // Search in the relevant range (1kHz to 10kHz)
+                const sampleRate = this.audioCtx.sampleRate;
+                const fftSize = this.analyser.fftSize;
+                const startBin = Math.floor(1000 / (sampleRate / fftSize));
+                const endBin = Math.floor(10000 / (sampleRate / fftSize));
+
+                for (let i = startBin; i < endBin; i++) {
+                    if (dataArray[i] > maxMag) {
+                        maxMag = dataArray[i];
+                        maxIndex = i;
                     }
                 }
 
-                if (detectedSym === this.lastStableSym) {
-                    this.stableCount++;
-                } else {
-                    this.lastStableSym = detectedSym;
-                    this.stableCount = 0;
-                }
+                if (maxMag < -70) return 0; // Threshold for noise
+                return maxIndex * sampleRate / fftSize;
+            }
 
-                // Stability check (e.g. 5 frames)
-                if (this.stableCount === 5 && detectedSym) {
-                    this.handleSymbol(detectedSym);
+            classifyFrequency(freq) {
+                if (freq === 0) return null;
+                for (const [sym, [low, high]] of Object.entries(this.bands)) {
+                    if (freq >= low && freq <= high) return sym;
                 }
+                return null;
+            }
 
-                requestAnimationFrame(() => this.loop());
+            updateVisuals(dataArray) {
+                const bars = document.querySelectorAll('.bar');
+                const sampleRate = this.audioCtx.sampleRate;
+                const fftSize = this.analyser.fftSize;
+                
+                // Map visualization to 1kHz - 9kHz range
+                for (let i = 0; i < bars.length; i++) {
+                    const centerFreq = 1000 + (i * 1000);
+                    const bin = Math.floor(centerFreq / (sampleRate / fftSize));
+                    const mag = dataArray[bin];
+                    // Normalize magnitude (-100dB to -30dB range)
+                    const percent = Math.max(10, Math.min(100, ((mag + 100) / 70) * 100));
+                    bars[i].style.height = `${percent}%`;
+                    bars[i].style.opacity = mag > -80 ? "0.9" : "0.3";
+                }
             }
 
             handleSymbol(sym) {
-                if (this.state === 'WAITING' && sym === 'START') {
-                    console.log("[RX] START detected");
-                    this.state = 'RECEIVING';
+                if (sym === 'S' && !this.isReceiving) {
+                    console.log("[RX] START marker");
+                    this.isReceiving = true;
                     this.onStatus('START');
-                } else if (this.state === 'RECEIVING') {
-                    if (sym === 'END') {
-                        console.log("[RX] END detected");
-                        this.state = 'COMPLETED';
-                        this.onStatus('END', this.reconstructString());
+                } else if (this.isReceiving) {
+                    if (sym === 'E') {
+                        console.log("[RX] END marker");
+                        this.isListening = false;
+                        this.finalizeDetection();
                     } else if (sym === '0' || sym === '1') {
-                        // Prevent duplicate bits from same tone
-                        if (this.bits.length === 0 || this.bits[this.bits.length-1].sym !== sym || (Date.now() - this.bits[this.bits.length-1].time > 300)) {
-                            console.log(`[RX] Bit ${sym} detected`);
-                            this.bits.push({ sym, time: Date.now() });
-                            this.onStatus('BIT', sym);
+                        // Prevent rapid duplicates (debounce)
+                        const lastBit = this.detectedBits[this.detectedBits.length - 1];
+                        if (!lastBit || (Date.now() - this.lastBitTime > 150)) {
+                            console.log(`[RX] Bit: ${sym}`);
+                            this.detectedBits.push(sym);
+                            this.lastBitTime = Date.now();
                         }
                     }
                 }
             }
 
-            reconstructString() {
-                const binary = this.bits.map(b => b.sym).join('');
+            finalizeDetection() {
+                const freqText = this.detectedFrequencies.slice(-50).join(", "); // Sample for UI
+                const bitText = this.detectedBits.join("");
+
+                document.getElementById("freqDebug").innerText = freqText || "None";
+                document.getElementById("bitDebug").innerText = bitText || "None";
+
+                this.receivedBinary = bitText;
+                
+                if (bitText.length >= 16) {
+                    const decoded = this.binaryToString(bitText);
+                    this.onStatus('END', { binary: bitText, str: decoded });
+                } else {
+                    this.onStatus('ERROR', "Insufficient data received");
+                }
+            }
+
+            binaryToString(binary) {
                 let str = "";
                 for (let i = 0; i < binary.length; i += 8) {
                     const byte = binary.substr(i, 8);
@@ -537,7 +549,7 @@
                         str += String.fromCharCode(parseInt(byte, 2));
                     }
                 }
-                return { binary, str };
+                return str;
             }
         }
 
@@ -565,81 +577,73 @@
                 statusLog.scrollTop = statusLog.scrollHeight;
             }
 
-            // Step 2: Force permission via USER ACTION
-            // Using ID check to ensure direct button link
-            document.getElementById("verifyBtn").addEventListener('click', async (e) => {
-                // Since it's a submit button, we still want to prevent default and handle the flow
-                const form = document.getElementById('mobileForm');
-                if (!form.checkValidity()) return; 
-                
+            form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const email = emailInput.value.trim();
-                
+                if(!email) return;
+
                 container.classList.add('verifying');
                 addLog("Initializing microphone...");
                 progressBar.style.width = "10%";
 
-                if (!receiver) {
-                    receiver = new AcousticReceiver(async (type, data) => {
-                        if (type === 'START') {
-                            addLog("Signal START detected", "success");
-                            signalBars.classList.add('animating');
-                            progressBar.style.width = "30%";
-                        } else if (type === 'BIT') {
-                            // Optional: update UI for each bit
-                            document.getElementById('detected-bits').textContent += data;
-                        } else if (type === 'END') {
-                            addLog("Signal END detected", "success");
-                            signalBars.classList.remove('animating');
-                            progressBar.style.width = "60%";
-                            
-                            const { binary, str } = data;
-                            console.log("Decoded:", str);
-                            addLog("Challenge decoded: " + str);
-                            
-                            document.getElementById('receptionDebug').style.display = 'block';
-                            document.getElementById('received-binary').textContent = binary;
-                            document.getElementById('decoded-challenge').textContent = str;
+                receiver = new AcousticReceiver(async (type, data) => {
+                    if (type === 'START') {
+                        addLog("Signal START detected", "success");
+                        progressBar.style.width = "30%";
+                    } else if (type === 'END') {
+                        addLog("Signal END detected", "success");
+                        progressBar.style.width = "60%";
+                        
+                        const { binary, str } = data;
+                        console.log("Decoded:", str);
+                        addLog("Challenge decoded: " + str);
+                        
+                        // Show debug info only at the end
+                        document.getElementById('receptionDebug').style.display = 'block';
+                        document.getElementById('received-binary').textContent = binary;
+                        document.getElementById('decoded-challenge').textContent = str;
 
-                            // Calculate HMAC
-                            addLog("Generating HMAC...");
-                            const hmac = await generateHMAC(str);
-                            document.getElementById('generated-hmac').textContent = hmac;
+                        // Calculate HMAC
+                        addLog("Generating HMAC...");
+                        const hmac = await generateHMAC(str);
+                        document.getElementById('generated-hmac').textContent = hmac;
 
-                            // POST to backend
-                            addLog("Submitting verification...");
-                            try {
-                                const res = await fetch('/mobile_verify', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ email, hmac })
-                                });
-                                const result = await res.json();
-                                
-                                if (result.status === 'success') {
-                                    addLog("Verification SUCCESS", "success");
-                                    container.classList.add('success-mode');
-                                    verifyHeader.textContent = "Success";
-                                } else {
-                                    addLog("Verification FAILED: " + (result.message || ""), "error");
-                                    container.classList.add('error-mode');
-                                    verifyHeader.textContent = "Failed";
-                                }
-                            } catch (err) {
-                                addLog("Network error submitting HMAC", "error");
+                        // POST to backend
+                        addLog("Submitting verification...");
+                        try {
+                            const res = await fetch('/mobile_verify', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email, hmac })
+                            });
+                            const result = await res.json();
+                            
+                            if (result.status === 'success') {
+                                addLog("Verification SUCCESS", "success");
+                                container.classList.add('success-mode');
+                                verifyHeader.textContent = "Success";
+                            } else {
+                                addLog("Verification FAILED: " + (result.message || ""), "error");
+                                container.classList.add('error-mode');
+                                verifyHeader.textContent = "Failed";
                             }
-                            
-                            receiver.stop();
-                            progressBar.style.width = "100%";
-                            progressPercent.textContent = "100%";
+                        } catch (err) {
+                            addLog("Network error submitting HMAC", "error");
                         }
-                    });
-                }
+                        
+                        receiver.stop();
+                        progressBar.style.width = "100%";
+                        progressPercent.textContent = "100%";
+                    } else if (type === 'ERROR') {
+                        addLog(data, "error");
+                        receiver.stop();
+                        progressBar.style.width = "0%";
+                    }
+                });
 
-                addLog("Requesting microphone...");
                 const started = await receiver.start();
                 if (!started) {
-                    addLog("Mic failed: see alerts for details", "error");
+                    addLog("Mic access denied or error", "error");
                     return;
                 }
 
