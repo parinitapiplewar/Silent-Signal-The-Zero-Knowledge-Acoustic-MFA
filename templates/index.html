@@ -418,6 +418,67 @@
     </div>
 
     <script>
+        // --- Web Audio API Transmitter ---
+        class AcousticTransmitter {
+            constructor() {
+                this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                this.frequencies = {
+                    'START': 2000,
+                    '0': 3000,
+                    '1': 4000,
+                    'END': 1500
+                };
+                this.toneDuration = 0.4; // seconds
+                this.gapDuration = 0.15; // seconds
+            }
+
+            async playTone(freq, duration) {
+                if (this.audioCtx.state === 'suspended') {
+                    await this.audioCtx.resume();
+                }
+                const oscillator = this.audioCtx.createOscillator();
+                const gainNode = this.audioCtx.createGain();
+
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+
+                gainNode.gain.setValueAtTime(0, this.audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.5, this.audioCtx.currentTime + 0.01);
+                gainNode.gain.setValueAtTime(0.5, this.audioCtx.currentTime + duration - 0.01);
+                gainNode.gain.linearRampToValueAtTime(0, this.audioCtx.currentTime + duration);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioCtx.destination);
+
+                oscillator.start();
+                oscillator.stop(this.audioCtx.currentTime + duration);
+
+                return new Promise(resolve => setTimeout(resolve, (duration + this.gapDuration) * 1000));
+            }
+
+            stringToBinary(str) {
+                return str.split('').map(char => {
+                    return char.charCodeAt(0).toString(2).padStart(8, '0');
+                }).join('');
+            }
+
+            async transmit(challenge) {
+                const binary = this.stringToBinary(challenge);
+                console.log(`[TX] Transmitting binary: ${binary}`);
+                
+                // Play START marker
+                await this.playTone(this.frequencies['START'], this.toneDuration);
+                
+                // Play bits
+                for (const bit of binary) {
+                    await this.playTone(this.frequencies[bit], this.toneDuration);
+                }
+                
+                // Play END marker
+                await this.playTone(this.frequencies['END'], this.toneDuration);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const loginForm = document.getElementById('loginForm');
             const mainContainer = document.getElementById('mainContainer');
@@ -430,6 +491,8 @@
             const progressPercent = document.getElementById('progressPercent');
             const statusTitle = document.getElementById('statusTitle');
             const statusIndicator = document.getElementById('statusIndicator');
+
+            const transmitter = new AcousticTransmitter();
 
             // Canvas Setup
             const canvas = document.getElementById('signalCanvas');
@@ -537,95 +600,85 @@
                 await new Promise(r => setTimeout(r, 600));
                 resizeCanvas();
 
-                const phases = [
-                    { msg: "Initializing...", progress: 10, startAnim: false },
-                    { msg: "Generating challenge...", progress: 25, startAnim: false },
-                    { msg: "Encoding signal...", progress: 40, startAnim: false },
-                    { msg: "Transmitting...", progress: 65, startAnim: true },
-                    { msg: "Waiting for response...", progress: 80, startAnim: true },
-                    { msg: "Verifying...", progress: 95, startAnim: false }
-                ];
-
+                addLogEntry("Initializing...");
+                progressBar.style.width = "10%";
+                
                 let jobId = null;
-                const backendPromise = fetch('/start_verification', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
-                }).then(res => res.json())
-                  .then(data => { jobId = data.job_id; })
-                  .catch(err => { console.error("Error connecting to backend:", err); });
+                let challenge = null;
 
-                for (let i = 0; i < phases.length; i++) {
-                    const phase = phases[i];
-                    addLogEntry(phase.msg);
-                    progressBar.style.width = `${phase.progress}%`;
-                    progressText.textContent = phase.msg;
-                    progressPercent.textContent = `${phase.progress}%`;
-                    
-                    if (phase.startAnim) {
-                        startAnimation();
-                    } else {
-                        stopAnimation();
-                    }
-
-                    // Simulate waiting for each step
-                    await new Promise(r => setTimeout(r, 800));
+                try {
+                    addLogEntry("Requesting challenge...");
+                    const res = await fetch('/start_verification', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email })
+                    });
+                    const data = await res.json();
+                    jobId = data.job_id;
+                    challenge = data.challenge;
+                } catch (err) {
+                    addLogEntry("Failed to connect to backend", "error");
+                    return;
                 }
 
-                // Wait for backend to actually complete
-                await backendPromise;
+                if (!challenge) {
+                    addLogEntry("No challenge received", "error");
+                    return;
+                }
 
-                let resultStatus = "failed";
+                addLogEntry("Challenge received: " + challenge);
+                addLogEntry("Transmitting acoustic signal...");
+                progressBar.style.width = "40%";
+                progressText.textContent = "Transmitting...";
+                progressPercent.textContent = "40%";
+                startAnimation();
+
+                // Transmission
+                await transmitter.transmit(challenge);
+                
+                addLogEntry("Transmission complete. Waiting for mobile response...");
+                progressBar.style.width = "70%";
+                progressText.textContent = "Waiting for response...";
+                progressPercent.textContent = "70%";
+
+                let resultStatus = "running";
                 let debugData = null;
-                while (jobId) {
+                
+                // Polling for mobile verification
+                const maxPolls = 120; // 2 minutes
+                for (let i = 0; i < maxPolls; i++) {
                     try {
                         let res = await fetch(`/status/${jobId}`);
                         let data = await res.json();
-                        console.log("Debug Response:", data); // Print returned JSON
                         
                         if (data.status === 'success' || data.status === 'failed') {
                             resultStatus = data.status;
                             debugData = data;
                             break;
-                        } else if (data.status === 'completed') {
-                            resultStatus = data.result.status || data.result;
-                            debugData = data.result;
-                            break;
-                        } else if (data.status === 'error') {
-                            break;
                         }
-                    } catch(e) { break; }
+                    } catch(e) { console.error("Poll error:", e); }
                     await new Promise(r => setTimeout(r, 1000));
                 }
 
-                // Final phase: Completed
-                addLogEntry("Completed");
-                progressBar.style.width = `100%`;
-                progressPercent.textContent = `100%`;
                 stopAnimation();
+                progressBar.style.width = "100%";
+                progressPercent.textContent = "100%";
 
-                const isSuccess = resultStatus === 'success';
-
-                if (isSuccess) {
+                if (resultStatus === 'success') {
                     addLogEntry("Authentication Successful", "success");
                     progressText.textContent = "Authentication Successful";
-                    
-                    mainContainer.classList.remove('error');
                     mainContainer.classList.add('success');
                     statusTitle.textContent = "Authenticated";
                     loginBtn.textContent = 'Success';
                 } else {
-                    addLogEntry("Authentication Failed", "error");
+                    addLogEntry("Authentication Failed or Timeout", "error");
                     progressText.textContent = "Authentication Failed";
-                    
-                    mainContainer.classList.remove('success');
                     mainContainer.classList.add('error');
                     statusTitle.textContent = "Failed";
                     loginBtn.textContent = 'Failed';
                 }
 
-                if (debugData && debugData.binary_sent) {
-                    console.log("Updating UI with debug data:", debugData);
+                if (debugData) {
                     const debugSection = document.getElementById('transmissionDebug');
                     debugSection.style.display = 'flex';
                     document.getElementById('sent-challenge').textContent = debugData.challenge || '';

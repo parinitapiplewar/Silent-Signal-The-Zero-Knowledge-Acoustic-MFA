@@ -376,6 +376,145 @@
     </div>
 
     <script>
+        // --- HMAC Helper ---
+        async function generateHMAC(challenge) {
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode("vibe_signal_key");
+            const msgData = encoder.encode(challenge);
+            
+            const cryptoKey = await crypto.subtle.importKey(
+                "raw", keyData, { name: "HMAC", hash: "SHA-256" },
+                false, ["sign"]
+            );
+            
+            const signature = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // --- Web Audio API Receiver ---
+        class AcousticReceiver {
+            constructor(onStatus) {
+                this.onStatus = onStatus;
+                this.audioCtx = null;
+                this.analyser = null;
+                this.stream = null;
+                this.bands = {
+                    'END':   [1200, 2000],
+                    'START': [1800, 2600],
+                    '0':     [2500, 3500],
+                    '1':     [3500, 5000]
+                };
+                this.state = 'WAITING'; // WAITING, RECEIVING, COMPLETED
+                this.bits = [];
+                this.lastStableSym = null;
+                this.stableCount = 0;
+                this.isListening = false;
+            }
+
+            async start() {
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = this.audioCtx.createMediaStreamSource(this.stream);
+                    this.analyser = this.audioCtx.createAnalyser();
+                    this.analyser.fftSize = 2048;
+                    source.connect(this.analyser);
+                    this.isListening = true;
+                    this.loop();
+                    return true;
+                } catch (err) {
+                    console.error("Mic access error:", err);
+                    return false;
+                }
+            }
+
+            stop() {
+                this.isListening = false;
+                if (this.stream) this.stream.getTracks().forEach(t => t.stop());
+                if (this.audioCtx) this.audioCtx.close();
+            }
+
+            getBandEnergy(dataArray, lowFreq, highFreq) {
+                const sampleRate = this.audioCtx.sampleRate;
+                const fftSize = this.analyser.fftSize;
+                const lowBin = Math.round(lowFreq / (sampleRate / fftSize));
+                const highBin = Math.round(highFreq / (sampleRate / fftSize));
+                
+                let energy = 0;
+                for (let i = lowBin; i <= highBin; i++) {
+                    energy += dataArray[i];
+                }
+                return energy / (highBin - lowBin + 1);
+            }
+
+            loop() {
+                if (!this.isListening) return;
+
+                const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                this.analyser.getByteFrequencyData(dataArray);
+
+                let maxEnergy = 0;
+                let detectedSym = null;
+
+                for (const [sym, range] of Object.entries(this.bands)) {
+                    const energy = this.getBandEnergy(dataArray, range[0], range[1]);
+                    if (energy > maxEnergy && energy > 40) { // Threshold
+                        maxEnergy = energy;
+                        detectedSym = sym;
+                    }
+                }
+
+                if (detectedSym === this.lastStableSym) {
+                    this.stableCount++;
+                } else {
+                    this.lastStableSym = detectedSym;
+                    this.stableCount = 0;
+                }
+
+                // Stability check (e.g. 5 frames)
+                if (this.stableCount === 5 && detectedSym) {
+                    this.handleSymbol(detectedSym);
+                }
+
+                requestAnimationFrame(() => this.loop());
+            }
+
+            handleSymbol(sym) {
+                if (this.state === 'WAITING' && sym === 'START') {
+                    console.log("[RX] START detected");
+                    this.state = 'RECEIVING';
+                    this.onStatus('START');
+                } else if (this.state === 'RECEIVING') {
+                    if (sym === 'END') {
+                        console.log("[RX] END detected");
+                        this.state = 'COMPLETED';
+                        this.onStatus('END', this.reconstructString());
+                    } else if (sym === '0' || sym === '1') {
+                        // Prevent duplicate bits from same tone
+                        if (this.bits.length === 0 || this.bits[this.bits.length-1].sym !== sym || (Date.now() - this.bits[this.bits.length-1].time > 300)) {
+                            console.log(`[RX] Bit ${sym} detected`);
+                            this.bits.push({ sym, time: Date.now() });
+                            this.onStatus('BIT', sym);
+                        }
+                    }
+                }
+            }
+
+            reconstructString() {
+                const binary = this.bits.map(b => b.sym).join('');
+                let str = "";
+                for (let i = 0; i < binary.length; i += 8) {
+                    const byte = binary.substr(i, 8);
+                    if (byte.length === 8) {
+                        str += String.fromCharCode(parseInt(byte, 2));
+                    }
+                }
+                return { binary, str };
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             const form = document.getElementById('mobileForm');
             const emailInput = document.getElementById('emailInput');
@@ -387,15 +526,7 @@
             const resultMsg = document.getElementById('resultMsg');
             const verifyHeader = document.getElementById('verifyHeader');
 
-            const steps = [
-                { msg: "Initializing system...", delay: 600, progress: 15, anim: false },
-                { msg: "Listening for ultrasonic signal...", delay: 1000, progress: 30, anim: true },
-                { msg: "Signal detected", delay: 800, progress: 45, anim: true },
-                { msg: "Decoding challenge...", delay: 900, progress: 60, anim: false },
-                { msg: "Generating secure response (HMAC)...", delay: 800, progress: 75, anim: false },
-                { msg: "Transmitting response...", delay: 1500, progress: 90, anim: true },
-                { msg: "Response sent successfully", delay: 500, progress: 100, anim: false }
-            ];
+            let receiver = null;
 
             function addLog(text, className = 'active') {
                 const prev = statusLog.querySelector('.active');
@@ -413,104 +544,75 @@
                 const email = emailInput.value.trim();
                 if(!email) return;
 
-                // Transition UI
                 container.classList.add('verifying');
+                addLog("Initializing microphone...");
+                progressBar.style.width = "10%";
 
-                // Start backend request
-                let fetchFinished = false;
-                let fetchOk = false;
-                let resultStatus = "failed";
-                let debugData = null;
+                receiver = new AcousticReceiver(async (type, data) => {
+                    if (type === 'START') {
+                        addLog("Signal START detected", "success");
+                        signalBars.classList.add('animating');
+                        progressBar.style.width = "30%";
+                    } else if (type === 'BIT') {
+                        // Optional: update UI for each bit
+                        document.getElementById('detected-bits').textContent += data;
+                    } else if (type === 'END') {
+                        addLog("Signal END detected", "success");
+                        signalBars.classList.remove('animating');
+                        progressBar.style.width = "60%";
+                        
+                        const { binary, str } = data;
+                        console.log("Decoded:", str);
+                        addLog("Challenge decoded: " + str);
+                        
+                        document.getElementById('receptionDebug').style.display = 'block';
+                        document.getElementById('received-binary').textContent = binary;
+                        document.getElementById('decoded-challenge').textContent = str;
 
-                const backendPromise = fetch('/mobile_verify_start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                }).then(res => res.json()).then(data => {
-                    fetchOk = true;
-                    console.log("Debug Response:", data);
-                    resultStatus = data.status || 'success';
-                    debugData = data;
-                    fetchFinished = true;
-                }).catch(err => {
-                    console.error("Connection error:", err);
-                    fetchOk = false;
-                    fetchFinished = true;
+                        // Calculate HMAC
+                        addLog("Generating HMAC...");
+                        const hmac = await generateHMAC(str);
+                        document.getElementById('generated-hmac').textContent = hmac;
+
+                        // POST to backend
+                        addLog("Submitting verification...");
+                        try {
+                            const res = await fetch('/mobile_verify', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email, hmac })
+                            });
+                            const result = await res.json();
+                            
+                            if (result.status === 'success') {
+                                addLog("Verification SUCCESS", "success");
+                                container.classList.add('success-mode');
+                                verifyHeader.textContent = "Success";
+                            } else {
+                                addLog("Verification FAILED: " + (result.message || ""), "error");
+                                container.classList.add('error-mode');
+                                verifyHeader.textContent = "Failed";
+                            }
+                        } catch (err) {
+                            addLog("Network error submitting HMAC", "error");
+                        }
+                        
+                        receiver.stop();
+                        progressBar.style.width = "100%";
+                        progressPercent.textContent = "100%";
+                    }
                 });
 
-                // Run initial simulation steps
-                for (let i = 0; i < 2; i++) {
-                    const s = steps[i];
-                    if (s.anim) signalBars.classList.add('animating');
-                    else signalBars.classList.remove('animating');
-                    addLog(s.msg);
-                    progressBar.style.width = `${s.progress}%`;
-                    progressPercent.textContent = `${s.progress}%`;
-                    await new Promise(r => setTimeout(r, s.delay));
+                const started = await receiver.start();
+                if (!started) {
+                    addLog("Mic access denied or error", "error");
+                    return;
                 }
 
-                // Wait for actual backend response at "Listening..." stage
-                await backendPromise;
-                
-                // If signal was not detected at all, show disruption error
-                if (resultStatus === 'failed' && (!debugData || !debugData.received_binary || debugData.received_binary === "None" || debugData.received_binary === "")) {
-                    signalBars.classList.remove('animating');
-                    container.classList.add('error-mode');
-                    addLog("SIGNAL DISRUPTED", "error");
-                    addLog("No ultrasonic signature detected", "error");
-                    verifyHeader.textContent = "Signal Lost";
-                    resultMsg.textContent = "Authentication Disrupted";
-                    
-                    if (debugData) updateDebug(debugData);
-                    return; 
-                }
-
-                // Continue simulation for the rest of the steps if signal was found
-                for (let i = 2; i < steps.length; i++) {
-                    const s = steps[i];
-                    if (s.anim) signalBars.classList.add('animating');
-                    else signalBars.classList.remove('animating');
-                    addLog(s.msg);
-                    progressBar.style.width = `${s.progress}%`;
-                    progressPercent.textContent = `${s.progress}%`;
-                    await new Promise(r => setTimeout(r, s.delay));
-                }
-                
-                signalBars.classList.remove('animating');
-
-                if (fetchOk && resultStatus === 'success') {
-                    container.classList.add('success-mode');
-                    addLog("Workflow finished securely", "success");
-                    verifyHeader.textContent = "Success";
-                    resultMsg.textContent = "Verification Complete";
-                } else {
-                    container.classList.add('error-mode');
-                    addLog("Verification failed", "error");
-                    verifyHeader.textContent = "Failed";
-                    resultMsg.textContent = "Verification Failed";
-                }
-
-                if (debugData) updateDebug(debugData);
+                addLog("Listening for ultrasonic signal...");
+                document.getElementById('liveDetectionDebug').style.display = 'block';
             });
-
-            function updateDebug(debugData) {
-                if (debugData.received_binary !== undefined) {
-                    const debugSec = document.getElementById('receptionDebug');
-                    debugSec.style.display = 'block';
-                    document.getElementById('received-binary').textContent = debugData.received_binary || 'None';
-                    document.getElementById('decoded-challenge').textContent = debugData.decoded_challenge || 'None';
-                    document.getElementById('generated-hmac').textContent = debugData.hmac || 'None';
-                }
-
-                if (debugData.detected_freqs) {
-                    const liveSec = document.getElementById('liveDetectionDebug');
-                    liveSec.style.display = 'block';
-                    document.getElementById('detected-freqs').textContent = debugData.detected_freqs.join(', ');
-                    document.getElementById('detected-bits').textContent = debugData.detected_bits.join(', ');
-                }
-            }
         });
-
     </script>
 </body>
 </html>
